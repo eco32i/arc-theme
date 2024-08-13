@@ -1,5 +1,5 @@
 # supported versions
-cinnamon_versions = ['2.8', '3.0', '3.2', '3.4', '3.6', '3.8', '4.0', '4.2', '4.4', '4.6', '4.8']
+cinnamon_versions = ['3.8', '4.0', '4.2', '4.4', '4.6', '4.8', '5.0', '5.2', '5.4']
 
 # cinnamon version
 cinnamon = find_program('cinnamon', required : false)
@@ -7,7 +7,7 @@ cinnamon = find_program('cinnamon', required : false)
 if get_option('cinnamon_version') != ''
   cinnamon_full_ver = get_option('cinnamon_version')
 elif cinnamon.found()
-  cinnamon_full_ver = run_command(cinnamon, '--version').stdout().split()[-1]
+  cinnamon_full_ver = run_command(cinnamon, '--version', check : true).stdout().split()[-1]
 else
   error('Could not determine Cinnamon version')
 endif
@@ -39,40 +39,52 @@ sass_depend_files = run_command(
 ).stdout().split()
 
 foreach variant : get_option('variants')
-  if variant != 'darker' and variant != 'lighter'
-    input_scss = (variant == 'light' ? 'cinnamon.scss' : 'cinnamon-' + variant + '.scss')
-    output_css = (variant == 'light' ? 'cinnamon.css' : 'cinnamon-' + variant + '.css')
-
-    cinnamon_css = custom_target(
-      output_css,
-      input : meson.current_source_dir() / cinnamon_ver / 'sass' / input_scss,
-      output : output_css,
-      command : [sassc, '@INPUT@', '@OUTPUT@'],
-      build_by_default : true,
-      depend_files : sass_depend_files
-    )
-
-    meson.add_install_script(
-      'sh', '-c',
-      'install -DT' + ' ' +
-      cinnamon_css.full_path() + ' ' +
-      '$MESON_INSTALL_DESTDIR_PREFIX' / install_dir.get(variant) / common_dirs.get('cinnamon') / 'cinnamon.css'
-    )
-
-    install_subdir(
-      cinnamon_ver / 'common-assets',
-      install_dir : prefix / install_dir.get(variant) / common_dirs.get('cinnamon')
-    )
-
-    install_subdir(
-      cinnamon_ver / variant + '-assets',
-      install_dir : prefix / install_dir.get(variant) / common_dirs.get('cinnamon')
-    )
-
-    install_data(
-      variant == 'light' ? 'thumbnail.png' : 'thumbnail-dark.png',
-      rename : 'thumbnail.png',
-      install_dir : prefix / install_dir.get(variant) / common_dirs.get('cinnamon')
-    )
+  # no darker or lighter cinnamon theme
+  if variant == 'darker' or variant == 'lighter'
+    continue
   endif
+
+  # generate base SCSS file
+  input_scss = configure_file(
+    input: meson.current_source_dir() / cinnamon_ver / 'sass' / 'cinnamon.scss.in',
+    output : 'cinnamon-' + variant + '.scss',
+    configuration : {
+      'variant' : variant,
+      'transparency' : true.to_string(),
+      'sass_path' : meson.current_source_dir() / cinnamon_ver / 'sass',
+    }
+  )
+
+  output_css = (variant == 'light' ? 'cinnamon.css' : 'cinnamon-' + variant + '.css')
+
+  cinnamon_css = custom_target(
+    output_css,
+    input : input_scss,
+    output : output_css,
+    command : [sassc, sassc_options, '@INPUT@', '@OUTPUT@'],
+    build_by_default : true,
+    depend_files : sass_depend_files
+  )
+
+  meson.add_install_script(
+    install_file,
+    cinnamon_css.full_path(),
+    '$MESON_INSTALL_DESTDIR_PREFIX' / install_dir.get(variant) / common_dirs.get('cinnamon') / 'cinnamon.css'
+  )
+
+  install_subdir(
+    cinnamon_ver / 'common-assets',
+    install_dir : prefix / install_dir.get(variant) / common_dirs.get('cinnamon')
+  )
+
+  install_subdir(
+    cinnamon_ver / variant + '-assets',
+    install_dir : prefix / install_dir.get(variant) / common_dirs.get('cinnamon')
+  )
+
+  install_data(
+    'thumbnail' / variant + '.png',
+    rename : 'thumbnail.png',
+    install_dir : prefix / install_dir.get(variant) / common_dirs.get('cinnamon')
+  )
 endforeach
